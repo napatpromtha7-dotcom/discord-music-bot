@@ -1,87 +1,58 @@
 import discord
 from discord.ext import commands
-import os
 import yt_dlp
+import asyncio
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'quiet': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'restrictfilenames': True,
+    'source_address': '0.0.0.0',
+    'noplaylist': True,
+    'extract_flat': False,
+    'force-ipv4': True,
+}
+
+ffmpeg_options = {
+    'options': '-vn'
+}
+
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    print(f'Logged in as {bot.user}')
 
-# ======================
-# JOIN
-# ======================
-@bot.command()
-async def join(ctx):
-    if ctx.author.voice:
-        channel = ctx.author.voice.channel
-        if ctx.voice_client:
-            await ctx.voice_client.move_to(channel)
-        else:
-            await channel.connect()
-        await ctx.send("เข้าห้องแล้ว 🎵")
-    else:
-        await ctx.send("คุณต้องอยู่ในห้องเสียงก่อน!")
-
-# ======================
-# LEAVE
-# ======================
-@bot.command()
-async def leave(ctx):
-    if ctx.voice_client:
-        await ctx.voice_client.disconnect()
-        await ctx.send("ออกจากห้องแล้ว 👋")
-    else:
-        await ctx.send("บอทยังไม่ได้เข้าห้อง")
-
-# ======================
-# PLAY
-# ======================
 @bot.command()
 async def play(ctx, url):
     if not ctx.author.voice:
-        await ctx.send("คุณต้องอยู่ในห้องเสียงก่อน!")
+        await ctx.send("❌ เข้าห้องเสียงก่อน")
         return
 
     channel = ctx.author.voice.channel
+    voice = await channel.connect()
 
-    if not ctx.voice_client:
-        await channel.connect()
-    elif ctx.voice_client.channel != channel:
-        await ctx.voice_client.move_to(channel)
+    loop = asyncio.get_event_loop()
+    data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
 
-    ydl_opts = {
-        'format': 'bestaudio',
-        'quiet': True
-    }
+    url2 = data['url']
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            url2 = info['url']
+    source = await discord.FFmpegOpusAudio.from_probe(url2, **ffmpeg_options)
+    voice.play(source)
 
-        ctx.voice_client.stop()
-        ctx.voice_client.play(discord.FFmpegPCMAudio(url2))
-        await ctx.send("กำลังเปิดเพลง 🎶")
+    await ctx.send(f"🎵 กำลังเล่น: {data['title']}")
 
-    except Exception as e:
-        await ctx.send("เกิดข้อผิดพลาดในการเปิดเพลง")
-        print(e)
-
-# ======================
-# STOP
-# ======================
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
-        ctx.voice_client.stop()
-        await ctx.send("หยุดเพลงแล้ว ⏹️")
-    else:
-        await ctx.send("ไม่มีเพลงกำลังเล่น")
+        import os
 
 bot.run(os.getenv("TOKEN"))
