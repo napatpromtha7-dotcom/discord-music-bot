@@ -2,23 +2,16 @@ import discord
 from discord.ext import commands
 import yt_dlp
 import asyncio
+import os
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'quiet': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'restrictfilenames': True,
-    'source_address': '0.0.0.0',
     'noplaylist': True,
-    'extract_flat': False,
-    'force-ipv4': True,
 }
 
 ffmpeg_options = {
@@ -32,16 +25,23 @@ async def on_ready():
     print(f'Logged in as {bot.user}')
 
 @bot.command()
-async def play(ctx, url):
+async def play(ctx, *, url):
     if not ctx.author.voice:
         await ctx.send("❌ เข้าห้องเสียงก่อน")
         return
 
     channel = ctx.author.voice.channel
-    voice = await channel.connect()
+
+    if ctx.voice_client is None:
+        voice = await channel.connect()
+    else:
+        voice = ctx.voice_client
 
     loop = asyncio.get_event_loop()
     data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+
+    if 'entries' in data:
+        data = data['entries'][0]
 
     url2 = data['url']
 
@@ -53,6 +53,6 @@ async def play(ctx, url):
 @bot.command()
 async def stop(ctx):
     if ctx.voice_client:
-        import os
+        await ctx.voice_client.disconnect()
 
 bot.run(os.getenv("TOKEN"))
